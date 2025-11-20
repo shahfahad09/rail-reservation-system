@@ -3,6 +3,7 @@
 #include <string>
 #include <iomanip>
 #include <limits>
+#include <fstream>
 using namespace std;
 
 class Train {
@@ -11,7 +12,7 @@ public:
     string train_name;
     int available_seats;
 
-    Train(int number, string name, int seats)
+    Train(int number = 0, string name = "", int seats = 0)
         : train_number(number), train_name(name), available_seats(seats) {}
 };
 
@@ -20,10 +21,12 @@ public:
     int train_number;
     string passenger_name;
     int passenger_age;
+    bool is_active;
     string cancellation_reason;
 
-    Booking(int number, string name, int age)
-        : train_number(number), passenger_name(name), passenger_age(age), cancellation_reason("") {}
+    Booking(int number = 0, string name = "", int age = 0, bool active = true, string reason = "")
+        : train_number(number), passenger_name(name), passenger_age(age),
+          is_active(active), cancellation_reason(reason) {}
 };
 
 class RailwayReservationSystem {
@@ -32,213 +35,239 @@ private:
     queue<Booking> bookings;
 
 public:
-    void add_train(int number, string name, int seats) {
-        Train new_train(number, name, seats);
-        trains.push(new_train);
-        cout << "Train added successfully." << endl;
+    RailwayReservationSystem() {
+        loadTrainsFromCSV();
+        loadBookingsFromCSV();
     }
 
-    void view_trains() {
-        cout << setw(15) << "Train Number" << setw(30) << "Train Name" << setw(20) << "Available Seats" << endl;
-        cout << "-------------------------------------------------------------" << endl;
+    void saveTrainsToCSV() {
+        ofstream file("trains.csv");
+        file << "TrainNumber,TrainName,AvailableSeats\n";
 
         queue<Train> temp = trains;
         while (!temp.empty()) {
-            Train train = temp.front();
-            cout << setw(15) << train.train_number 
-                 << setw(30) << train.train_name 
-                 << setw(20) << train.available_seats << endl;
-            temp.pop();
+            Train t = temp.front(); temp.pop();
+            file << t.train_number << "," << t.train_name << "," << t.available_seats << "\n";
+        }
+        file.close();
+    }
+
+    void saveBookingsToCSV() {
+        ofstream file("bookings.csv");
+        file << "TrainNumber,PassengerName,Age,Status,CancellationReason\n";
+
+        queue<Booking> temp = bookings;
+        while (!temp.empty()) {
+            Booking b = temp.front(); temp.pop();
+            file << b.train_number << "," << b.passenger_name << "," << b.passenger_age << ","
+                 << (b.is_active ? "Active" : "Cancelled") << "," << b.cancellation_reason << "\n";
+        }
+        file.close();
+    }
+
+    void loadTrainsFromCSV() {
+        ifstream file("trains.csv");
+        if (!file) return;
+
+        string line;
+        getline(file, line); // header skip
+
+        while (getline(file, line)) {
+            int num, seats;
+            string name;
+
+            size_t p1 = line.find(",");
+            size_t p2 = line.find(",", p1 + 1);
+
+            num = stoi(line.substr(0, p1));
+            name = line.substr(p1 + 1, p2 - (p1 + 1));
+            seats = stoi(line.substr(p2 + 1));
+
+            trains.push(Train(num, name, seats));
+        }
+        file.close();
+    }
+
+    void loadBookingsFromCSV() {
+        ifstream file("bookings.csv");
+        if (!file) return;
+
+        string line;
+        getline(file, line); // header skip
+
+        while (getline(file, line)) {
+            int num, age;
+            string pname, status, reason;
+
+            size_t p1 = line.find(",");
+            size_t p2 = line.find(",", p1 + 1);
+            size_t p3 = line.find(",", p2 + 1);
+            size_t p4 = line.find(",", p3 + 1);
+
+            num = stoi(line.substr(0, p1));
+            pname = line.substr(p1 + 1, p2 - (p1 + 1));
+            age = stoi(line.substr(p2 + 1, p3 - (p2 + 1)));
+            status = line.substr(p3 + 1, p4 - (p3 + 1));
+            reason = line.substr(p4 + 1);
+
+            bool active = (status == "Active");
+
+            bookings.push(Booking(num, pname, age, active, reason));
+        }
+        file.close();
+    }
+
+    void add_train(int number, string name, int seats) {
+        trains.push(Train(number, name, seats));
+        saveTrainsToCSV();
+        cout << "Train added successfully.\n";
+    }
+
+    void view_trains() {
+        cout << setw(15) << "Train Number" << setw(30) << "Train Name"
+             << setw(20) << "Available Seats\n";
+        cout << "----------------------------------------------------------------\n";
+
+        queue<Train> temp = trains;
+        while (!temp.empty()) {
+            Train t = temp.front(); temp.pop();
+            cout << setw(15) << t.train_number
+                 << setw(30) << t.train_name
+                 << setw(20) << t.available_seats << "\n";
         }
     }
 
     void book_ticket(int train_number) {
         queue<Train> temp = trains;
-        bool train_found = false;
+        bool found = false;
+        Train selected;
 
         while (!temp.empty()) {
-            Train train = temp.front();
-            if (train.train_number == train_number) {
-                train_found = true;
-                if (train.available_seats > 0) {
-                    string passenger_name;
-                    int passenger_age;
-
-                    cout << "Enter Passenger Name: ";
-                    cin.ignore();
-                    getline(cin, passenger_name);
-                    cout << "Enter Passenger Age: ";
-                    cin >> passenger_age;
-
-                    Booking new_booking(train_number, passenger_name, passenger_age);
-                    bookings.push(new_booking);
-
-                    queue<Train> temp_trains;
-                    while (!trains.empty()) {
-                        Train t = trains.front();
-                        if (t.train_number == train_number) {
-                            t.available_seats--;
-                        }
-                        temp_trains.push(t);
-                        trains.pop();
-                    }
-                    trains = temp_trains;
-
-                    cout << "Ticket booked successfully for " << passenger_name 
-                         << " (Age: " << passenger_age << ") on Train " << train.train_name << "." << endl;
-                    return;
-                } else {
-                    cout << "Seat not available on Train " << train.train_name << "." << endl;
-                    return;
-                }
+            Train t = temp.front(); temp.pop();
+            if (t.train_number == train_number) {
+                found = true;
+                selected = t;
             }
-            temp.pop();
         }
 
-        if (!train_found) {
-            cout << "Train not found. Please check the train number." << endl;
+        if (!found) {
+            cout << "Train not found.\n";
+            return;
+        }
+
+        if (selected.available_seats <= 0) {
+            cout << "No seats available.\n";
+            return;
+        }
+
+        cin.ignore();
+        string name;
+        int age;
+        cout << "Enter Passenger Name: ";
+        getline(cin, name);
+        cout << "Enter Passenger Age: ";
+        cin >> age;
+
+        bookings.push(Booking(train_number, name, age, true, ""));
+        updateSeats(train_number, -1);
+        saveBookingsToCSV();
+
+        cout << "Ticket booked successfully!\n";
+    }
+
+    void updateSeats(int number, int diff) {
+        queue<Train> temp, newq;
+
+        while (!trains.empty()) {
+            Train t = trains.front(); trains.pop();
+            if (t.train_number == number) t.available_seats += diff;
+            newq.push(t);
+        }
+        trains = newq;
+        saveTrainsToCSV();
+    }
+
+    void cancel_ticket(string name, int age) {
+        queue<Booking> temp;
+        bool found = false;
+        int tn = 0;
+
+        cin.ignore();
+
+        while (!bookings.empty()) {
+            Booking b = bookings.front(); bookings.pop();
+            if (b.passenger_name == name && b.passenger_age == age && b.is_active) {
+                found = true;
+                b.is_active = false;
+                cout << "Enter cancellation reason: ";
+                getline(cin, b.cancellation_reason);
+                tn = b.train_number;
+            }
+            temp.push(b);
+        }
+        bookings = temp;
+
+        if (found) {
+            updateSeats(tn, +1);
+            saveBookingsToCSV();
+            cout << "Ticket cancelled.\n";
+        } else {
+            cout << "Booking not found.\n";
         }
     }
 
     void view_all_tickets() {
-        cout << setw(15) << "Train Number" << setw(20) << "Passenger Name" << setw(10) << "Age" 
-             << setw(15) << "Status" << setw(25) << "Cancellation Reason" << endl;
-        cout << "----------------------------------------------------------------------------------------" << endl;
+        cout << setw(15) << "Train No" << setw(20) << "Name" << setw(10) << "Age"
+             << setw(15) << "Status" << setw(25) << "Reason\n";
+        cout << "--------------------------------------------------------------------------------\n";
 
         queue<Booking> temp = bookings;
         while (!temp.empty()) {
-            Booking booking = temp.front();
-            cout << setw(15) << booking.train_number 
-                 << setw(20) << booking.passenger_name 
-                 << setw(10) << booking.passenger_age;
-
-            if (booking.cancellation_reason.empty()) {
-                cout << setw(15) << "Active" << setw(25) << "N/A" << endl;
-            } else {
-                cout << setw(15) << "Deactivated" << setw(25) << "N/A" << endl;
-                cout << setw(55) << " " << setw(25) << booking.cancellation_reason << endl;
-            }
-            temp.pop();
-        }
-    }
-
-    void cancel_ticket(string passenger_name, int passenger_age) {
-        queue<Booking> temp;
-        bool found = false;
-        int train_number = 0;
-
-        while (!bookings.empty()) {
-            Booking booking = bookings.front();
-            bookings.pop();
-
-            if (booking.passenger_name == passenger_name && booking.passenger_age == passenger_age) {
-                found = true;
-                string reason;
-                cout << "Enter reason for ticket cancellation: ";
-                cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                getline(cin, reason);
-                booking.cancellation_reason = reason;
-                train_number = booking.train_number;
-                cout << "Ticket canceled successfully for " << passenger_name << ". Reason: " << booking.cancellation_reason << endl;
-            }
-            temp.push(booking);
-        }
-
-        bookings = temp;
-
-        if (found && train_number != 0) {
-            queue<Train> temp_trains;
-            bool seat_updated = false;
-
-            while (!trains.empty()) {
-                Train train = trains.front();
-                trains.pop();
-
-                if (train.train_number == train_number && !seat_updated) {
-                    train.available_seats++;
-                    cout << "Seat availability updated for Train " << train.train_name << endl;
-                    seat_updated = true;
-                }
-
-                temp_trains.push(train);
-            }
-
-            trains = temp_trains;
-        } else if (!found) {
-            cout << "No booking found for " << passenger_name << " with age " << passenger_age << "." << endl;
+            Booking b = temp.front(); temp.pop();
+            cout << setw(15) << b.train_number
+                 << setw(20) << b.passenger_name
+                 << setw(10) << b.passenger_age
+                 << setw(15) << (b.is_active ? "Active" : "Cancelled")
+                 << setw(25) << (b.is_active ? "N/A" : b.cancellation_reason) << "\n";
         }
     }
 };
 
 int main() {
     RailwayReservationSystem system;
-    int choice;
+    int ch;
 
     do {
-        cout << "\nRailway Reservation System" << endl;
-        cout << "1. Add Train" << endl;
-        cout << "2. View Trains" << endl;
-        cout << "3. Book Ticket" << endl;
-        cout << "4. Cancel Ticket" << endl;
-        cout << "5. View All Tickets" << endl;
-        cout << "6. Exit" << endl;
-        cout << "Enter your choice: ";
-        
-        while (!(cin >> choice) || choice < 1 || choice > 6) {
-            cin.clear();
-            cin.ignore(numeric_limits<streamsize>::max(), '\n');
-            cout << "Invalid choice. Please enter a number between 1 and 6: ";
-        }
+        cout << "\n--- Railway Reservation System ---\n";
+        cout << "1. Add Train\n2. View Trains\n3. Book Ticket\n4. Cancel Ticket\n5. View All Tickets\n6. Exit\n";
+        cout << "Enter choice: ";
+        cin >> ch;
 
-        switch (choice) {
-            case 1: {
-                int number, seats;
-                string name;
-                cout << "Enter Train Number: ";
-                cin >> number;
-                cout << "Enter Train Name: ";
-                cin.ignore();
-                getline(cin, name);
-                cout << "Enter Available Seats: ";
-                cin >> seats;
-                system.add_train(number, name, seats);
-                break;
-            }
-            case 2:
-                system.view_trains();
-                break;
-            case 3: {
-                int number;
-                cout << "Enter Train Number: ";
-                while (!(cin >> number)) {
-                    cin.clear();
-                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                    cout << "Invalid input. Please enter a valid train number: ";
-                }
-                system.book_ticket(number);
-                break;
-            }
-            case 4: {
-                string name;
-                int age;
-                cout << "Enter Passenger Name to Cancel Ticket: ";
-                cin.ignore();
-                getline(cin, name);
-                cout << "Enter Passenger Age: ";
-                cin >> age;
-                system.cancel_ticket(name, age);
-                break;
-            }
-            case 5:
-                system.view_all_tickets();
-                break;
-            case 6:
-                cout << "Exiting..." << endl;
-                break;
-            default:
-                cout << "Invalid choice. Please try again." << endl;
+        if (ch == 1) {
+            int num, seats;
+            string name;
+            cout << "Train Number: "; cin >> num;
+            cout << "Train Name: "; cin.ignore(); getline(cin, name);
+            cout << "Seats: "; cin >> seats;
+            system.add_train(num, name, seats);
         }
-    } while (choice != 6);
+        else if (ch == 2) system.view_trains();
+        else if (ch == 3) {
+            int num;
+            cout << "Enter Train Number: ";
+            cin >> num;
+            system.book_ticket(num);
+        }
+        else if (ch == 4) {
+            string name;
+            int age;
+            cout << "Passenger Name: "; cin.ignore(); getline(cin, name);
+            cout << "Age: "; cin >> age;
+            system.cancel_ticket(name, age);
+        }
+        else if (ch == 5) system.view_all_tickets();
+
+    } while (ch != 6);
 
     return 0;
 }
